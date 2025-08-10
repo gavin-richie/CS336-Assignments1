@@ -29,8 +29,26 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
 
-    raise NotImplementedError
+    # raise NotImplementedError
+    # Create a Linear module with the given dimensions
+    # # Load the provided weights into the module
+    # linear.weight.data = weights.clone()
+    #
+    # # Apply the linear transformation
+    # output = linear(in_features)
 
+    assert weights.shape == (
+        d_out,
+        d_in,
+    ), f"The weights shape is {weights.shape}, not equal to {(d_out, d_in)}."
+    assert (
+            in_features.shape[-1] == d_in
+    ), f"The in_features's shape is {in_features.shape[-1]} while the din is {d_in}"
+
+    linear = Linear(d_in, d_out,device=weights.device, dtype=weights.dtype)
+    linear.load_state_dict({"weight": weights})
+
+    return linear(in_features)
 
 def run_embedding(
     vocab_size: int,
