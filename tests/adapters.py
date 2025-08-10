@@ -69,8 +69,26 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    # raise NotImplementedError
+    # Create an Embedding module with the given dimensions
+    # # Load the provided weights into the module
+    # embedding.weight.data = weights.clone()
+    #
+    # # Apply the embedding transformation
+    # output = embedding(token_ids)
 
+    assert weights.shape == (
+        vocab_size,
+        d_model,
+    ), f"The weights shape is {weights.shape}, not equal to {(vocab_size, d_model)}."
+    # assert (
+    #         token_ids.shape[-1] ==
+    # ), f"The token_ids's shape is {token_ids.shape[-1]} while the d_model is {d_model}"
+    assert token_ids.dtype == torch.long, f"Expected token_ids dtype torch.long, got {token_ids.dtype}"
+    embedding = Embedding(vocab_size, d_model,device=weights.device, dtype=weights.dtype)
+    embedding.load_state_dict({"embedding": weights})
+
+    return embedding(token_ids)
 
 def run_swiglu(
     d_model: int,
