@@ -9,6 +9,7 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
+from cs336_basics.attention import ScaledDotProductAttention, MultiHeadSelfAttention, MultiHeadSelfAttentionWithRoPE
 from cs336_basics.embedding import Embedding
 from cs336_basics.rmsnorm import RMSNorm
 from cs336_basics.rope import RoPE
@@ -150,8 +151,9 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
-
+    # raise NotImplementedError
+    attention = ScaledDotProductAttention()
+    return attention(Q, K, V, mask=mask)
 
 def run_multihead_self_attention(
     d_model: int,
@@ -184,8 +186,9 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
-
+    # raise NotImplementedError
+    multihead_attention = MultiHeadSelfAttention(d_model, num_heads)
+    return multihead_attention( in_features, q_proj_weight, k_proj_weight, v_proj_weight, o_proj_weight)
 
 def run_multihead_self_attention_with_rope(
     d_model: int,
@@ -224,8 +227,14 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
-
+    # raise NotImplementedError
+    multihead_attention = MultiHeadSelfAttentionWithRoPE(d_model, num_heads, max_seq_len, theta)
+    return multihead_attention(x=in_features,
+                               q_proj_weight=q_proj_weight,
+                               k_proj_weight=k_proj_weight,
+                               v_proj_weight=v_proj_weight,
+                               o_proj_weight=o_proj_weight,
+                               token_positions=token_positions)
 
 def run_rope(
     d_k: int,
