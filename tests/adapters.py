@@ -11,6 +11,8 @@ from torch import Tensor
 
 from cs336_basics.embedding import Embedding
 from cs336_basics.rmsnorm import RMSNorm
+from cs336_basics.rope import RoPE
+from cs336_basics.softmax import softmax
 from cs336_basics.swiglu import SwiGLU, SiLU
 from cs336_basics.tokenizer import BPETokenizer
 from cs336_basics.linear import Linear
@@ -244,7 +246,14 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    rope = RoPE(
+        d_k=d_k,
+        theta=theta,
+        max_seq_len=max_seq_len,
+        device=in_query_or_key.device,
+        dtype=in_query_or_key.dtype,
+    )
 
 
 def run_transformer_block(
