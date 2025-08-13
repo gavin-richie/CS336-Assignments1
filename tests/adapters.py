@@ -356,19 +356,19 @@ def run_transformer_block(
     """
     # raise NotImplementedError
     transformer_block = TransformerBlock(d_model, num_heads, d_ff, max_seq_len, theta)
-    # transformer_block.load_state_dict({
-    #     "attn.W_q.weight": weights['attn.q_proj.weight'],
-    #     "attn.W_k.weight": weights['attn.k_proj.weight'],
-    #     "attn.W_v.weight": weights['attn.v_proj.weight'],
-    #     "attn.W_o.weight": weights['attn.output_proj.weight'],
-    #     "ln1.weight": weights["ln1.weight"],
-    #     "ffn.swiglu.w1": weights["ffn.w1.weight"],
-    #     "ffn.swiglu.w2": weights["ffn.w2.weight"],
-    #     "ffn.swiglu.w3": weights["ffn.w3.weight"],
-    #     "ln2.weight": weights["ln2.weight"],
-    # })
-    # return transformer_block(in_features)
-    return transformer_block(in_features,weights)
+    transformer_block.load_state_dict({
+        "attn.W_q.weight": weights['attn.q_proj.weight'],
+        "attn.W_k.weight": weights['attn.k_proj.weight'],
+        "attn.W_v.weight": weights['attn.v_proj.weight'],
+        "attn.W_o.weight": weights['attn.output_proj.weight'],
+        "ln1.weight": weights["ln1.weight"],
+        "ffn.swiglu.w1": weights["ffn.w1.weight"],
+        "ffn.swiglu.w2": weights["ffn.w2.weight"],
+        "ffn.swiglu.w3": weights["ffn.w3.weight"],
+        "ln2.weight": weights["ln2.weight"],
+    })
+    return transformer_block(in_features)
+    # return transformer_block(in_features,weights)
 
 
 def run_transformer_lm(
@@ -454,43 +454,43 @@ def run_transformer_lm(
     transformer_lm = TransformerLM(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta,
                                    device=in_indices.device,
                                     dtype=in_indices.dtype,)
-    # transformer_lm.load_state_dict({
-    #     **{
-    #         f"layers.{i}.attn.W_q.weight": weights[f"layers.{i}.attn.q_proj.weight"]
-    #         for i in range(num_layers)
-    #     },
-    #     **{
-    #         f"layers.{i}.attn.W_k.weight": weights[f"layers.{i}.attn.k_proj.weight"]
-    #         for i in range(num_layers)
-    #     },
-    #     **{
-    #         f"layers.{i}.attn.W_v.weight": weights[f"layers.{i}.attn.v_proj.weight"]
-    #         for i in range(num_layers)
-    #     },
-    #     **{
-    #         f"layers.{i}.attn.W_o.weight": weights[f"layers.{i}.attn.output_proj.weight"] for i in range(num_layers)
-    #     },
-    #     **{
-    #         f"layers.{i}.ln1.weight": weights[f"layers.{i}.ln1.weight"] for i in range(num_layers)
-    #     },
-    #     **{
-    #         f"layers.{i}.ffn.swiglu.w1": weights[f"layers.{i}.ffn.w1.weight"] for i in range(num_layers)
-    #     },
-    #     **{
-    #         f"layers.{i}.ffn.swiglu.w2": weights[f"layers.{i}.ffn.w2.weight"] for i in range(num_layers)
-    #     },
-    #     **{
-    #         f"layers.{i}.ffn.swiglu.w3": weights[f"layers.{i}.ffn.w3.weight"] for i in range(num_layers)
-    #     },
-    #     **{
-    #         f"layers.{i}.ln2.weight": weights[f"layers.{i}.ln2.weight"] for i in range(num_layers)
-    #     },
-    #     "token_embedding.weight": weights["token_embeddings.weight"],
-    #     "ln_final.weight": weights["ln_final.weight"],
-    #     "lm_head.weight": weights["lm_head.weight"],
-    # })
-    # return transformer_lm(in_indices)
-    return transformer_lm(in_indices, weights)
+    transformer_lm.load_state_dict({
+        **{
+            f"layers.{i}.attn.W_q.weight": weights[f"layers.{i}.attn.q_proj.weight"]
+            for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.attn.W_k.weight": weights[f"layers.{i}.attn.k_proj.weight"]
+            for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.attn.W_v.weight": weights[f"layers.{i}.attn.v_proj.weight"]
+            for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.attn.W_o.weight": weights[f"layers.{i}.attn.output_proj.weight"] for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.ln1.weight": weights[f"layers.{i}.ln1.weight"] for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.ffn.swiglu.w1": weights[f"layers.{i}.ffn.w1.weight"] for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.ffn.swiglu.w2": weights[f"layers.{i}.ffn.w2.weight"] for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.ffn.swiglu.w3": weights[f"layers.{i}.ffn.w3.weight"] for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.ln2.weight": weights[f"layers.{i}.ln2.weight"] for i in range(num_layers)
+        },
+        "token_embedding.weight": weights["token_embeddings.weight"],
+        "ln_final.weight": weights["ln_final.weight"],
+        "lm_head.weight": weights["lm_head.weight"],
+    })
+    return transformer_lm(in_indices)
+    # return transformer_lm(in_indices, weights)
 
 def run_rmsnorm(
     d_model: int,
