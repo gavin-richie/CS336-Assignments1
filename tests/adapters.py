@@ -17,6 +17,8 @@ from cs336_basics.softmax import softmax
 from cs336_basics.swiglu import SwiGLU, SiLU
 from cs336_basics.tokenizer import BPETokenizer
 from cs336_basics.linear import Linear
+from cs336_basics.transformerLM import TransformerBlock, TransformerLM
+
 
 def run_linear(
     d_in: int,
@@ -335,7 +337,9 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    transformer_block = TransformerBlock(d_model, num_heads, d_ff, max_seq_len, theta)
+    return transformer_block(in_features, weights)
 
 
 def run_transformer_lm(
@@ -417,8 +421,11 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
-
+    # raise NotImplementedError
+    transformer_lm = TransformerLM(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta,
+                                   device=in_indices.device,
+                                    dtype=in_indices.dtype)
+    return transformer_lm(in_indices, weights)
 
 def run_rmsnorm(
     d_model: int,
