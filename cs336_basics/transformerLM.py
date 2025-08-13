@@ -1,0 +1,90 @@
+import torch
+from torch import Tensor
+import torch.nn as nn
+import torch.nn.functional as F
+from typing import Optional, Dict
+from cs336_basics.attention import MultiHeadSelfAttentionWithRoPE
+from cs336_basics.embedding import Embedding
+from cs336_basics.rmsnorm import RMSNorm
+from cs336_basics.swiglu import FFN, glu
+from tests.conftest import vocab_size
+from jaxtyping import Float, Int
+
+class TransformerBlock(nn.Module):
+    def __init__(self, d_model:int, num_heads:int, d_ff:int, max_seq_len:int,theta:float,device=None,dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_ff = d_ff
+        self.ln1 = RMSNorm(d_model, device=device, dtype=dtype)
+        self.attn = MultiHeadSelfAttentionWithRoPE(d_model, num_heads, max_seq_len, theta)
+        self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
+        self.ffn = FFN(d_model, d_ff, device=device, dtype=dtype)
+
+    def forward(self,x:Tensor, token_positions:Optional[Tensor]=None) -> Tensor:
+        x_norm = self.ln1(x)
+        # if 'ln1.weight' in weights.keys():
+        #     x_norm = x_norm * weights['ln1.weight']
+
+        attn_out = self.attn(x_norm,
+                             # q_proj_weight=weights.get('attn.q_proj.weight'),
+                             # k_proj_weight=weights.get('attn.k_proj.weight'),
+                             # v_proj_weight=weights.get('attn.v_proj.weight'),
+                             # o_proj_weight=weights.get('attn.output_proj.weight'),
+                             token_positions=token_positions)
+        x = x + attn_out
+        x_norm = self.ln2(x)
+        # if 'ln2.weight' in weights.keys():
+            # x_norm = x_norm * weights['ln2.weight']
+
+        # if 'ffn.w1.weight' in weights.keys():
+        #     gate = glu(x_norm, weights.get('ffn.w1.weight'), weights.get('ffn.w3.weight'))
+        #     ffn_out = gate @ weights.get('ffn.w2.weight').t()
+        # else:
+        #     ffn_out = self.ffn(x_norm)
+        ffn_out = self.ffn(x_norm)
+        x = x + ffn_out
+
+        return x
+
+class TransformerLM(nn.Module):
+    def __init__(self, vocab_size:int, context_length:int, d_model:int, num_layers:int, num_heads:int, d_ff:int, theta:float, device=None, dtype=None):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.context_length = context_length
+        self.d_model = d_model
+        self.num_layers = num_layers
+
+        self.token_embedding = Embedding(vocab_size, d_model)
+        self.layers = nn.ModuleList([
+            TransformerBlock(d_model, num_heads, d_ff, context_length, theta)
+            for _ in range(num_layers)])
+
+        self.ln_final = RMSNorm(d_model)
+        self.lm_head = nn.Linear(d_model, vocab_size,bias=False)
+
+    def forward(self, in_indices:Tensor) -> Tensor:
+        x = self.token_embedding(in_indices)
+        batch_size, seq_len = in_indices.shape
+
+        # for layer in self.layers:
+        #     x = layer(x, token_positions=token_positions)
+
+        # 通过 Transformer 层
+        # for i in range(self.num_layers):
+        #     layer_prefix = f'layers.{i}.'
+            # layer_weights = {k[len(layer_prefix):]: weights[k] for k in weights if k.startswith(layer_prefix)}
+            # x = self.layers[i](x, layer_weights)
+        for block in self.layers:
+            x = block(x)
+
+        # 最终 RMSNorm
+        x_final = self.ln_final(x)
+        # x_final = x * weights['ln_final.weight']
+
+        # LM Head
+        logits = self.lm_head(x_final)
+        # logits = x_final @ weights['lm_head.weight'].t()
+
+        return logits
+
