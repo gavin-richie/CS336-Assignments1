@@ -17,8 +17,8 @@ from cs336_basics.softmax import softmax
 from cs336_basics.swiglu import SwiGLU, SiLU
 from cs336_basics.tokenizer import BPETokenizer
 from cs336_basics.linear import Linear
-from cs336_basics.transformerLM import TransformerBlock, TransformerLM
-
+# from cs336_basics.transformerLM import TransformerBlock, TransformerLM
+from cs336_basics.transformers import TransformerBlock,TransformerLM
 
 def run_linear(
     d_in: int,
@@ -129,7 +129,11 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    # raise NotImplementedError
+    assert w1_weight.shape == (d_ff, d_model), f"Expected w1_weight shape {(d_ff, d_model)}, got {w1_weight.shape}"
+    assert w2_weight.shape == (d_model, d_ff), f"Expected w2_weight shape {(d_model, d_ff)}, got {w2_weight.shape}"
+    assert w3_weight.shape == (d_ff, d_model), f"Expected w3_weight shape {(d_ff, d_model)}, got {w3_weight.shape}"
+    assert in_features.shape[-1] == d_model, f"Expected last dim {d_model}, got {in_features.shape[-1]}"
 
     swiglu = SwiGLU(d_model, d_ff,device=w1_weight.device, dtype=w1_weight.dtype)
     swiglu.load_state_dict({"w1": w1_weight, "w2": w2_weight, "w3": w3_weight})
@@ -190,7 +194,13 @@ def run_multihead_self_attention(
     """
     # raise NotImplementedError
     multihead_attention = MultiHeadSelfAttention(d_model, num_heads)
-    return multihead_attention( in_features, q_proj_weight, k_proj_weight, v_proj_weight, o_proj_weight)
+    multihead_attention.load_state_dict({
+        "W_q.weight": q_proj_weight,
+        "W_k.weight": k_proj_weight,
+        "W_v.weight": v_proj_weight,
+        "W_o.weight": o_proj_weight,
+    })
+    return multihead_attention( in_features )
 
 def run_multihead_self_attention_with_rope(
     d_model: int,
@@ -231,13 +241,19 @@ def run_multihead_self_attention_with_rope(
     """
     # raise NotImplementedError
     multihead_attention = MultiHeadSelfAttentionWithRoPE(d_model, num_heads, max_seq_len, theta)
-    return multihead_attention(x=in_features,
-                               q_proj_weight=q_proj_weight,
-                               k_proj_weight=k_proj_weight,
-                               v_proj_weight=v_proj_weight,
-                               o_proj_weight=o_proj_weight,
-                               token_positions=token_positions)
+    multihead_attention.load_state_dict({
+        "W_q.weight": q_proj_weight,
+        "W_k.weight": k_proj_weight,
+        "W_v.weight": v_proj_weight,
+        "W_o.weight": o_proj_weight,
+    })
 
+    return multihead_attention(x=in_features,
+                           # q_proj_weight=q_proj_weight,
+                           # k_proj_weight=k_proj_weight,
+                           # v_proj_weight=v_proj_weight,
+                           # o_proj_weight=o_proj_weight,
+                           token_positions=token_positions)
 def run_rope(
     d_k: int,
     theta: float,
@@ -266,6 +282,7 @@ def run_rope(
         dtype=in_query_or_key.dtype,
     )
 
+    return rope(in_query_or_key, token_positions)
 
 def run_transformer_block(
     d_model: int,
@@ -339,7 +356,19 @@ def run_transformer_block(
     """
     # raise NotImplementedError
     transformer_block = TransformerBlock(d_model, num_heads, d_ff, max_seq_len, theta)
-    return transformer_block(in_features, weights)
+    transformer_block.load_state_dict({
+        "attn.W_q.weight": weights['attn.q_proj.weight'],
+        "attn.W_k.weight": weights['attn.k_proj.weight'],
+        "attn.W_v.weight": weights['attn.v_proj.weight'],
+        "attn.W_o.weight": weights['attn.output_proj.weight'],
+        "ln1.weight": weights["ln1.weight"],
+        "ffn.swiglu.w1": weights["ffn.w1.weight"],
+        "ffn.swiglu.w2": weights["ffn.w2.weight"],
+        "ffn.swiglu.w3": weights["ffn.w3.weight"],
+        "ln2.weight": weights["ln2.weight"],
+    })
+    return transformer_block(in_features)
+    # return transformer_block(in_features,weights)
 
 
 def run_transformer_lm(
@@ -424,8 +453,44 @@ def run_transformer_lm(
     # raise NotImplementedError
     transformer_lm = TransformerLM(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta,
                                    device=in_indices.device,
-                                    dtype=in_indices.dtype)
-    return transformer_lm(in_indices, weights)
+                                    dtype=in_indices.dtype,)
+    transformer_lm.load_state_dict({
+        **{
+            f"layers.{i}.attn.W_q.weight": weights[f"layers.{i}.attn.q_proj.weight"]
+            for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.attn.W_k.weight": weights[f"layers.{i}.attn.k_proj.weight"]
+            for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.attn.W_v.weight": weights[f"layers.{i}.attn.v_proj.weight"]
+            for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.attn.W_o.weight": weights[f"layers.{i}.attn.output_proj.weight"] for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.ln1.weight": weights[f"layers.{i}.ln1.weight"] for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.ffn.swiglu.w1": weights[f"layers.{i}.ffn.w1.weight"] for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.ffn.swiglu.w2": weights[f"layers.{i}.ffn.w2.weight"] for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.ffn.swiglu.w3": weights[f"layers.{i}.ffn.w3.weight"] for i in range(num_layers)
+        },
+        **{
+            f"layers.{i}.ln2.weight": weights[f"layers.{i}.ln2.weight"] for i in range(num_layers)
+        },
+        "token_embedding.weight": weights["token_embeddings.weight"],
+        "ln_final.weight": weights["ln_final.weight"],
+        "lm_head.weight": weights["lm_head.weight"],
+    })
+    return transformer_lm(in_indices)
+    # return transformer_lm(in_indices, weights)
 
 def run_rmsnorm(
     d_model: int,
@@ -463,7 +528,8 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    # raise NotImplementedError
+    return SiLU(in_features)
 
 
 def run_get_batch(
@@ -630,7 +696,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    return BPETokenizer.from_serialized(vocab, merges, special_tokens)
 
 
 def run_train_bpe(
@@ -660,4 +726,7 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+
+    _tokenizer = BPETokenizer(vocab_size, special_tokens, **kwargs)
+    _tokenizer.train(input_path)
+    return _tokenizer.vocab, _tokenizer.merges
