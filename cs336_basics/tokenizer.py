@@ -1,5 +1,7 @@
 # cs336_basics/tokenizer.py
-
+# from asyncio import as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import time
 from typing import Iterable, Iterator, List, Dict, Tuple
 import os
 import regex as re
@@ -8,6 +10,9 @@ import heapq
 from collections import defaultdict, Counter
 from functools import total_ordering
 import json
+import pickle
+import numpy as np
+
 
 GPT2_SPLIT_PATTERN = (
     r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
@@ -15,7 +20,8 @@ GPT2_SPLIT_PATTERN = (
 
 
 def pretokenize(text: str) -> list[bytes]:
-    """使用GPT-2的正则表达式将文本分割成“词块”，并编码为bytes。
+    """
+    使用GPT-2的正则表达式将文本分割成“词块”，并编码为bytes。
     This step is very important!!!! Otherwise the b'a\n\nb' will be transfer into 'a' '\n\n' 'b'
     instead of 'a' '\n' '\n' 'b'
     ?\p{L}+             单词（支持多语言字母）     匹配普通单词
@@ -562,3 +568,110 @@ class BPETokenizer:
         instance.pair2new = {(p1, p2): instance.stoi[p1 + p2] for (p1, p2) in merges} # (bytes,bytes) -> int(token_id)
 
         return instance
+
+
+def get_tokenizer(vocab_path,
+                  merges_path,
+                  special_tokens=None):
+    if special_tokens is None:
+        special_tokens = ["<|endoftext|>"]
+    if vocab_path.endswith(".pkl") and merges_path.endswith(".pkl"):
+        try:
+            before_load_pkl = time.time()
+            print("Loading tokenizer from pickle")
+            print("vocab file: {}".format(vocab_path))
+            print("merges file: {}".format(merges_path))
+
+            with open(vocab_path, "rb") as f:
+                vocab = pickle.load(f)
+            with open(merges_path, "rb") as f:
+                merges = pickle.load(f)
+            tokenizer = BPETokenizer.from_serialized(vocab, merges, special_tokens)
+            print("Tokenizer loaded successfully")
+            after_load_pkl = time.time()
+            print(f"Time taken to load pickle: {after_load_pkl - before_load_pkl:.2f} seconds")
+            return tokenizer
+        except Exception as e:
+            print("Error loading tokenizer from pickle: {}".format(e))
+            raise e
+
+    if vocab_path.endswith(".json") and merges_path.endswith(".txt"):
+        try:
+            print("Loading tokenizer from json")
+            print("vocab file: {}".format(vocab_path))
+            print("merges file: {}".format(merges_path))
+            with open(vocab_path, "r",encoding="utf-8") as f:
+                vocab_data=json.load(f)
+            vocab={int(k):v.encode("utf-8") for k,v in vocab_data.items()}
+            with open(merges_path, "r",encoding="utf-8") as f:
+                merges_data=f.readlines()
+            merges=[(line.split()[0].encode("utf-8"),line.split()[1].encode("utf-8")) for line in merges_data]
+            tokenizer = BPETokenizer.from_serialized(vocab, merges, special_tokens)
+            print("Tokenizer loaded successfully")
+            return tokenizer
+        except Exception as e:
+            print("Error loading tokenizer from json and txt: {}".format(e))
+            raise e
+
+    return None
+
+
+def batch_tokenize(batch, tokenizer):
+
+    out = []
+    for line in batch:
+        out.extend(tokenizer.encode(line))
+    return np.array(out, dtype=np.int32)
+
+
+def encode_txt_as_memarray(tokenizer, txt_path, memmap_path,batch_size=4096,n_workers=8):
+    before_batch_tokenize = time.time()
+    print(f"Start tokenizing {txt_path}")
+
+    batches = []
+    with open(txt_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+        batch = []
+        for line in lines:
+            batch.append(line)
+            if len(batch) == batch_size:
+                batches.append(batch)
+                batch = []
+        if batch:
+            batches.append(batch)
+    after_batch_tokenize = time.time()
+    print(f"Time taken to batch tokenize: {after_batch_tokenize - before_batch_tokenize:.2f} seconds")
+
+    total_tokens = 0
+    results = []
+    # debug tokenize time-consuming
+    before_encode = time.time()
+    print(f"Start encoding {txt_path}")
+    with ProcessPoolExecutor(max_workers=n_workers) as executor:
+        from tqdm import tqdm
+        futures = []
+        for batch in batches:
+            futures.append(executor.submit(batch_tokenize, batch, tokenizer))
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Tokenizing"):
+            result = future.result()
+            results.append(result)
+            total_tokens += result.shape[0]
+
+    after_encode = time.time()
+    print(f"Time taken to encode: {after_encode - before_encode:.2f} seconds\n total_tokens={total_tokens}")
+
+
+    before_mem_map = time.time()
+    print(f"Start writing mem_map {memmap_path}")
+    # debug memmap time-consuming
+    os.makedirs(os.path.dirname(memmap_path), exist_ok=True)
+    token_memmap = np.memmap(memmap_path, dtype=np.int32, mode="w+", shape=(total_tokens,))
+    offset = 0
+    print(f"results[0].shape[0]={results[0].shape[0]}, len(results[0])={len(results[0])}")
+    for result in results:
+        token_memmap[offset:offset+result.shape[0]] = result
+        offset += result.shape[0]
+    token_memmap.flush()
+
+    after_mem_map = time.time()
+    print(f"Time taken to write mem_map: {after_mem_map- before_mem_map:.2f} seconds")
