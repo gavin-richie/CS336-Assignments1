@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Tuple
 from numpy.typing import NDArray
 import numpy as np
@@ -8,7 +9,45 @@ from typing import Union, BinaryIO, IO
 from os import PathLike
 
 
+@dataclass
+class PretrainedConfig():
+    # project
+    project_name: str
+    # data parameter
+    vocab_path: str
+    merges_path: str
+    special_tokens: list[str]
+    train_path: str
+    valid_path: str
 
+    # model parameter (7.2 TinyStories)
+    batch_size: int = 32 #
+    vocab_size: int = 10000  # TinyStories 1000 owt 32000
+    context_length: int = 256
+    d_model: int = 512
+    d_ff: int =  1344
+    rope_theta: float = 10000
+    num_layers: int = 4
+    num_heads: int = 16
+    use_compile: bool = True
+
+    # training parameter (LLaMA: Open and Efficient Foundation Language Model)
+    learning_rate: float = 3e-4
+    beta1: float = 0.9
+    beta2: float = 0.95
+    epsilon: float = 1e-8
+    weight_decay: float = 0.01 #
+    gradient_clipping: float = 1.0
+    warmup_steps: int = 4000   # 10% of total_steps
+    total_steps: int = 1000 # 40000
+
+    # logging and checkpoint
+    log_freq: int = 100
+    eval_freq: int = 1000
+    eval_batch: int = 10
+    checkpoint_freq: int = 15000 # 5000
+    checkpoint_dir: str | None = None
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
 def cross_entropy(inputs: Tensor, targets: Tensor)->Tensor:
     # assert (
@@ -21,7 +60,9 @@ def cross_entropy(inputs: Tensor, targets: Tensor)->Tensor:
     # loss = -log_probs[batch_idx, targets].mean()
     #
     # return loss.to(inputs.dtype)
-    batch_size, vocab_size = inputs.size()
+    # batch_size, vocab_size = inputs.size()
+    inputs = inputs.view(-1, inputs.size(-1))
+    targets = targets.view(-1)
     """
         计算交叉熵损失，处理批量输入并确保数值稳定性。
 
@@ -40,7 +81,7 @@ def cross_entropy(inputs: Tensor, targets: Tensor)->Tensor:
     log_sum_exp = torch.log(torch.sum(torch.exp(shifted_logits), dim=-1))
 
     # 收集目标位置的 logits
-    target_logits = inputs[torch.arange(batch_size), targets]
+    target_logits = inputs[torch.arange(inputs.size(0)), targets]
     # 原公式-log{softmax(logit_i)[target_{i+1}]
     # 对softmax求log，对数指数消除，对数相除 对应除式相减 ：-logits[target_i] + log(sum(exp(logits_i)))
     # 计算交叉熵损失：-target_logit + log_sum_exp
@@ -78,7 +119,7 @@ def get_batch(
 
     # 随机选择 batch_size 个起始索引
     max_start_idx = len(dataset) - context_length
-    start_indices = np.random.randint(0, max_start_idx, size=batch_size)
+    start_indices = np.random.randint(0, max_start_idx, size=batch_size,dtype=np.int64)
 
     # 构建输入序列和目标序列
     inputs = np.stack([dataset[i:i + context_length] for i in start_indices])
