@@ -200,3 +200,19 @@ def test_silu_matches_pytorch():
     expected_output = F.silu(x)
     actual_output = run_silu(x)
     numpy.testing.assert_allclose(actual_output.detach().numpy(), expected_output.detach().numpy(), atol=1e-6)
+
+
+def test_transformer_lm_print_trainable_parameters():
+    """
+    Test the print_trainable_parameters method of TransformerLM.
+    """
+    # Create a TransformerLM model
+    from cs336_basics.transformerLM import TransformerLM
+    model = TransformerLM(vocab_size=1000,
+                          context_length=128,
+                          d_model=512,
+                          num_layers=2,
+                          num_heads=8,
+                          d_ff=2048,
+                          theta=10000)
+    model.print_trainable_parameters(verbose=True)

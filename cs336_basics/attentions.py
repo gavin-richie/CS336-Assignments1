@@ -53,10 +53,10 @@ class MultiHeadSelfAttention(nn.Module):
     def forward(
             self,
             x: Tensor,
-            # q_proj_weight: Optional[Tensor] = None,
-            # k_proj_weight: Optional[Tensor] = None,
-            # v_proj_weight: Optional[Tensor] = None,
-            # o_proj_weight: Optional[Tensor] = None
+            q_proj_weight: Optional[Tensor] = None,
+            k_proj_weight: Optional[Tensor] = None,
+            v_proj_weight: Optional[Tensor] = None,
+            o_proj_weight: Optional[Tensor] = None
     ) -> Tensor:
         """
         Forward pass for multi-head self-attention with causal masking.
@@ -78,10 +78,10 @@ class MultiHeadSelfAttention(nn.Module):
         batch_size, seq_len, d_in = x.size()[-3:]
 
         # Linear projections
-        # Q = torch.matmul(x, q_proj_weight.transpose(-2, -1))  # (..., seq_len, d_model)
-        # K = torch.matmul(x, k_proj_weight.transpose(-2, -1))  # (..., seq_len, d_model)
-        # V = torch.matmul(x, v_proj_weight.transpose(-2, -1))  # (..., seq_len, d_model)
-        Q,K,V = self.W_q(x), self.W_k(x), self.W_v(x)
+        Q = torch.matmul(x, q_proj_weight.transpose(-2, -1))  # (..., seq_len, d_model)
+        K = torch.matmul(x, k_proj_weight.transpose(-2, -1))  # (..., seq_len, d_model)
+        V = torch.matmul(x, v_proj_weight.transpose(-2, -1))  # (..., seq_len, d_model)
+        # Q,K,V = self.W_q(x), self.W_k(x), self.W_v(x)
 
         # Reshape for multi-head: (..., seq_len, d_model) -> (..., num_heads, seq_len, head_dim)
         Q = Q.view(batch_size, seq_len, self.num_heads, head_dim).transpose(-3, -2)
@@ -108,14 +108,14 @@ class MultiHeadSelfAttention(nn.Module):
 
 
         # Final output projection
-        # out = torch.matmul(attn_out, o_proj_weight.transpose(-2, -1))  # (..., seq_len, d_model)
-        out = self.W_o(attn_out)
+        out = torch.matmul(attn_out, o_proj_weight.transpose(-2, -1))  # (..., seq_len, d_model)
+        # out = self.W_o(attn_out)
 
         return out
 
 
 class MultiHeadSelfAttentionWithRoPE(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, max_seq_len: int, theta: float = 10000.0, device: str = "cpu"):
+    def __init__(self, d_model: int, num_heads: int, max_seq_len: int, theta: float = 10000.0):
         """
         Initialize Multihead Self-Attention with Rotary Position Embeddings (RoPE).
 
@@ -131,10 +131,10 @@ class MultiHeadSelfAttentionWithRoPE(nn.Module):
         self.num_heads = num_heads
         self.d_k = d_model // num_heads  # Dimension per head
         self.d_v = self.d_k  # Following Vaswani et al., d_v = d_k
-        self.W_q = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device)
-        self.W_k = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device)
-        self.W_v = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device)
-        self.W_o = nn.Linear(self.num_heads * self.d_k, d_model, bias=False, device=device)
+        self.W_q = nn.Linear(d_model, self.num_heads * self.d_k, bias=False)
+        self.W_k = nn.Linear(d_model, self.num_heads * self.d_k, bias=False)
+        self.W_v = nn.Linear(d_model, self.num_heads * self.d_k, bias=False)
+        self.W_o = nn.Linear(self.num_heads * self.d_k, d_model, bias=False)
         self.attention = ScaledDotProductAttention()
         self.theta = theta
         self.inv_freq = 1.0 / (theta ** (torch.arange(0, self.d_k, 2).float() / self.d_k))
@@ -179,11 +179,6 @@ class MultiHeadSelfAttentionWithRoPE(nn.Module):
     def forward(
             self,
             x: Tensor,
-            # q_proj_weight: Optional[Tensor] = None,
-            # k_proj_weight: Optional[Tensor] = None,
-            # v_proj_weight: Optional[Tensor] = None,
-            # o_proj_weight: Optional[Tensor] = None,
-            # mask: Optional[Tensor] = None,
             token_positions: Optional[Tensor] = None
     ) -> Tensor:
         """
@@ -204,15 +199,10 @@ class MultiHeadSelfAttentionWithRoPE(nn.Module):
         batch_size, seq_len, d_model = x.size()
 
         # Use provided weights or identity matrices
-        # W_q = q_proj_weight if q_proj_weight is not None else torch.eye(d_model, device=x.device)
-        # W_k = k_proj_weight if k_proj_weight is not None else torch.eye(d_model, device=x.device)
-        # W_v = v_proj_weight if v_proj_weight is not None else torch.eye(d_model, device=x.device)
-        # W_o = o_proj_weight if o_proj_weight is not None else torch.eye(d_model, device=x.device)
+
 
         # Linear projections in a single matrix multiply
-        # Q = torch.matmul(x, W_q.t())  # (batch_size, seq_len, d_model)
-        # K = torch.matmul(x, W_k.t())  # (batch_size, seq_len, d_model)
-        # V = torch.matmul(x, W_v.t())  # (batch_size, seq_len, d_model)
+
         Q,K,V = self.W_q(x), self.W_k(x), self.W_v(x)
 
         # Reshape for multi-head: (batch_size, seq_len, num_heads, d_k) -> (batch_size, num_heads, seq_len, d_k)
@@ -226,7 +216,7 @@ class MultiHeadSelfAttentionWithRoPE(nn.Module):
 
         # Create causal mask
         causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device), diagonal=1).bool()
-        causal_mask = causal_mask.unsqueeze(0).unsqueeze(0).expand(batch_size, self.num_heads, -1, -1)  # (batch_size, seq_len, seq_len)
+        causal_mask = causal_mask.unsqueeze(0).expand(batch_size, -1, -1)  # (batch_size, seq_len, seq_len)
 
         # Combine causal mask with optional input mask
         # if mask is not None:

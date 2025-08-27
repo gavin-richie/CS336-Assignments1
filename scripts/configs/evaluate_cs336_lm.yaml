@@ -1,0 +1,37 @@
+root_dir: ${hydra:runtime.cwd}
+
+dataset_name: owt     # `TinyStories` or `owt`, change as needed
+exp_name: cs336_lm_${dataset_name}
+vocab_size_map:
+  TinyStories: 10_000
+  owt: 32_000
+
+eval:
+  save_path: checkpoints/${exp_name}  # checkpoints/cs336_lm_owt/
+  iteration: 5000 # 10000 cpkt_interations set in inference
+  prompt: It’s good news for Google, though it still pales in comparison to Apple’s $28 billion
+  # That empowerment comes with added scrutiny valid ts_5000.pt poorly inferring
+  # Once upon a time there was a little girl named Lucy tinystories_10000.pt better inferring
+  max_new_tokens: 64
+  temperature: 1.0
+  top_k: 50
+
+model_type: cs336_lm
+model:
+  vocab_size: ${vocab_size_map.${dataset_name}} # 32000
+  context_length: 256
+  d_model: 512
+  num_layers: 4
+  num_heads: 16
+  d_ff: 1344
+  theta: 10000.0  # rope_theta
+  device: "cuda"
+
+
+
+dataset_split: train          # `train` or `valid`, change as needed
+tokenizer_dir: ${root_dir}/tokenizers/${dataset_name}_${dataset_split}/ # save path for tokenizer
+tokenizer:
+  vocab_path: ${tokenizer_dir}/vocab.pkl
+  merges_path: ${tokenizer_dir}/merges.pkl
+  special_tokens: ["<|endoftext|>"]
