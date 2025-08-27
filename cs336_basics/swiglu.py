@@ -77,7 +77,7 @@ class SwiGLU(nn.Module):
         return gate @ self.w2.t()
 
 class FFN(nn.Module):
-    def __init__(self, d_model: int, device=None, dtype=None):
+    def __init__(self, d_model: int, d_ff: int, device=None, dtype=None):
         """
         Construct the Feed-Forward Network using SwiGLU.
 
@@ -87,7 +87,7 @@ class FFN(nn.Module):
             dtype (torch.dtype | None): Data type of the parameters (default: None)
         """
         super().__init__()
-        self.swiglu = SwiGLU(d_model, device=device, dtype=dtype)
+        self.swiglu = SwiGLU(d_model, d_ff, device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

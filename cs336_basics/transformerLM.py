@@ -1,13 +1,14 @@
 import torch
 from torch import Tensor
 import torch.nn as nn
-import torch.nn.functional as F
 from typing import Optional, Dict
 from cs336_basics.attention import MultiHeadSelfAttentionWithRoPE
 from cs336_basics.embedding import Embedding
 from cs336_basics.rmsnorm import RMSNorm
 from cs336_basics.swiglu import FFN, glu
 from tests.conftest import vocab_size
+# from torch.nn.functional import softmax
+from cs336_basics.softmax import softmax
 from jaxtyping import Float, Int
 
 class TransformerBlock(nn.Module):
@@ -17,9 +18,9 @@ class TransformerBlock(nn.Module):
         self.num_heads = num_heads
         self.d_ff = d_ff
         self.ln1 = RMSNorm(d_model, device=device, dtype=dtype)
-        self.attn = MultiHeadSelfAttentionWithRoPE(d_model, num_heads, max_seq_len, theta)
+        self.attn = MultiHeadSelfAttentionWithRoPE(d_model, num_heads, max_seq_len, theta,device)
         self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
-        self.ffn = FFN(d_model, d_ff, device=device, dtype=dtype)
+        self.ffn = FFN(d_model, d_ff, device, dtype)
 
     def forward(self,x:Tensor, token_positions:Optional[Tensor]=None) -> Tensor:
         x_norm = self.ln1(x)
@@ -55,13 +56,13 @@ class TransformerLM(nn.Module):
         self.d_model = d_model
         self.num_layers = num_layers
 
-        self.token_embedding = Embedding(vocab_size, d_model)
+        self.token_embedding = Embedding(vocab_size, d_model, device)
         self.layers = nn.ModuleList([
-            TransformerBlock(d_model, num_heads, d_ff, context_length, theta)
+            TransformerBlock(d_model, num_heads, d_ff, context_length, theta, device)
             for _ in range(num_layers)])
 
-        self.ln_final = RMSNorm(d_model)
-        self.lm_head = nn.Linear(d_model, vocab_size,bias=False)
+        self.ln_final = RMSNorm(d_model,device=device, dtype=dtype)
+        self.lm_head = nn.Linear(d_model, vocab_size,bias=False, device=device)
 
     def forward(self, in_indices:Tensor) -> Tensor:
         x = self.token_embedding(in_indices)

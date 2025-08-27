@@ -80,6 +80,15 @@ class AdamW(torch.optim.Optimizer):
 
 
 def lr_cosine_schedule(t:int, max_lr:float, min_lr:float,warm_up: int,ct:int):
+    """
+
+    :param t: current step t / the current iteration
+    :param max_lr: the maximum learning rate -> alpha_max
+    :param min_lr: the minimum learning rate -> alpha_min
+    :param warm_up: the number of warm-up iterations->T_w
+    :param ct: the number of cosine annealing iterations->T_c
+    :return:
+    """
     if t < warm_up:
         alpha_t = t/warm_up * max_lr
         return alpha_t

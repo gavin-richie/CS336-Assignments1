@@ -115,7 +115,7 @@ class MultiHeadSelfAttention(nn.Module):
 
 
 class MultiHeadSelfAttentionWithRoPE(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, max_seq_len: int, theta: float = 10000.0):
+    def __init__(self, d_model: int, num_heads: int, max_seq_len: int, theta: float = 10000.0, device: str = "cpu"):
         """
         Initialize Multihead Self-Attention with Rotary Position Embeddings (RoPE).
 
@@ -131,10 +131,10 @@ class MultiHeadSelfAttentionWithRoPE(nn.Module):
         self.num_heads = num_heads
         self.d_k = d_model // num_heads  # Dimension per head
         self.d_v = self.d_k  # Following Vaswani et al., d_v = d_k
-        self.W_q = nn.Linear(d_model, self.num_heads * self.d_k, bias=False)
-        self.W_k = nn.Linear(d_model, self.num_heads * self.d_k, bias=False)
-        self.W_v = nn.Linear(d_model, self.num_heads * self.d_k, bias=False)
-        self.W_o = nn.Linear(self.num_heads * self.d_k, d_model, bias=False)
+        self.W_q = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device)
+        self.W_k = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device)
+        self.W_v = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device)
+        self.W_o = nn.Linear(self.num_heads * self.d_k, d_model, bias=False, device=device)
         self.attention = ScaledDotProductAttention()
         self.theta = theta
         self.inv_freq = 1.0 / (theta ** (torch.arange(0, self.d_k, 2).float() / self.d_k))
@@ -226,7 +226,7 @@ class MultiHeadSelfAttentionWithRoPE(nn.Module):
 
         # Create causal mask
         causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=x.device), diagonal=1).bool()
-        causal_mask = causal_mask.unsqueeze(0).expand(batch_size, -1, -1)  # (batch_size, seq_len, seq_len)
+        causal_mask = causal_mask.unsqueeze(0).unsqueeze(0).expand(batch_size, self.num_heads, -1, -1)  # (batch_size, seq_len, seq_len)
 
         # Combine causal mask with optional input mask
         # if mask is not None:

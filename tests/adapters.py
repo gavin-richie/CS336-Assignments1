@@ -18,8 +18,8 @@ from cs336_basics.softmax import softmax
 from cs336_basics.swiglu import SwiGLU, SiLU
 from cs336_basics.tokenizer import BPETokenizer
 from cs336_basics.linear import Linear
-# from cs336_basics.transformerLM import TransformerBlock, TransformerLM
-from cs336_basics.transformers import TransformerBlock,TransformerLM
+from cs336_basics.transformerLM import TransformerBlock, TransformerLM
+# from cs336_basics.transformers import TransformerBlock,TransformerLM
 from cs336_basics.utils import cross_entropy, get_batch, load_checkpoint, save_checkpoint
 
 
@@ -99,7 +99,7 @@ def run_embedding(
     # ), f"The token_ids's shape is {token_ids.shape[-1]} while the d_model is {d_model}"
     assert token_ids.dtype == torch.long, f"Expected token_ids dtype torch.long, got {token_ids.dtype}"
     embedding = Embedding(vocab_size, d_model,device=weights.device, dtype=weights.dtype)
-    embedding.load_state_dict({"embedding": weights})
+    embedding.load_state_dict({"weight": weights})
 
     return embedding(token_ids)
 
