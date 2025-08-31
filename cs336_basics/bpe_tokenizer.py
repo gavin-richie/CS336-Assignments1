@@ -9,6 +9,7 @@ import json
 import pickle
 import numpy as np
 from tqdm import tqdm
+from cs336_basics.experiments import *
 
 GPT2_SPLIT_PATTERN = (
     r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
@@ -271,3 +272,34 @@ def encode_txt_as_memarray(tokenizer, txt_path, memmap_path, batch_size=8192, n_
 
     after_mem_map = time.time()
     print(f"Time taken to write mem_map {memmap_path}: {after_mem_map - before_mem_map:.2f} seconds")
+
+def memmap2npy(input_memmap_path: str, output_npy_path: str, chunk_size=100_000_000)->None:
+    """
+    Converts a memmap file(np.int32) to npy file(np.uint16).
+    :param input_memmap_path: Path to the input memmap file.
+    :param output_npy_path: Path to the output npy file.
+    :param chunk_size: Chunk size to read from the memmap file.
+    :return: None
+    """
+    t0 = time.time()
+    logger.info(f"Converting mem_map file to npy file {input_memmap_path}")
+    mem_map = np.memmap(input_memmap_path, dtype=np.int32, mode="r")
+    total_tokens = mem_map.shape[0]
+    logger.info(f"Total tokens={total_tokens}")
+
+    if np.any(mem_map>np.iinfo(np.uint16).max):
+        logger.error(f"mem_map contains tokens > np.iinfo(np.uint16).max={np.iinfo(np.uint16).max}")
+        raise ValueError(f"Token IDs exceed uint16 max value (65,535). Cannot convert to uint16.")
+    os.makedirs(os.path.dirname(output_npy_path), exist_ok=True)
+
+    chunks = []
+    for start in tqdm(range(0, total_tokens, chunk_size), desc="Converting chunks"):
+        end = min(start + chunk_size, total_tokens)
+        chunk = mem_map[start:end].astype(np.uint16)
+        chunks.append(chunk)
+
+    # Step 5: Concatenate and save
+    all_tokens = np.concatenate(chunks)
+    np.save(output_npy_path, all_tokens, allow_pickle=False)
+
+    logger.info(f"Time taken to convert mem_map file to npy file: {time.time() - t0:.2f} seconds")

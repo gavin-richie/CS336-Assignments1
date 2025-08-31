@@ -6,8 +6,9 @@ from typing import Optional
 import torch.nn.functional as F
 
 class ScaledDotProductAttention(nn.Module):
-    def __init__(self):
+    def __init__(self, dtype: torch.dtype):
         super().__init__()
+        self.dtype = dtype
 
     def forward(self,
                 Q:Tensor,
@@ -15,7 +16,10 @@ class ScaledDotProductAttention(nn.Module):
                 V:Tensor,
                 mask:Optional[Tensor]=None)->Tensor:
         d_k=Q.size(-1)
-        scores = torch.matmul(Q, K.transpose(-1, -2))/torch.sqrt(torch.tensor(d_k, dtype=torch.float))
+        # Q = Q.to(dtype=self.dtype)
+        # K = K.to(dtype=self.dtype)
+        # V = V.to(dtype=self.dtype)
+        scores = torch.matmul(Q, K.transpose(-1, -2))/torch.sqrt(torch.tensor(d_k, dtype=self.dtype))
         if mask is not None:
             scores = scores.masked_fill(~mask, float("-inf")) # 点积注意力和随机多头注意力的mask填充是相反的
             # 点积注意力的mask如果是Ture表示权重不变，随机多头注意力的mask如果是True表示负无穷
@@ -23,6 +27,8 @@ class ScaledDotProductAttention(nn.Module):
             # mask=(1-mask)*-1e9
             # scores = scores+mask
         attn_weights = scores.softmax(dim=-1)
+        # attn_weights = attn_weights.to(dtype=self.dtype)
+        # V = V.to(dtype=self.dtype)
         # attn_weights = F.softmax(scores, dim=-1)
         output = torch.matmul(attn_weights, V)
         return output
@@ -115,7 +121,12 @@ class MultiHeadSelfAttention(nn.Module):
 
 
 class MultiHeadSelfAttentionWithRoPE(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, max_seq_len: int, theta: float = 10000.0, device: str = "cpu"):
+    def __init__(self, d_model: int,
+                 num_heads: int,
+                 max_seq_len: int,
+                 theta: float = 10000.0,
+                 device: str = "cpu",
+                 dtype: torch.dtype = torch.float32):
         """
         Initialize Multihead Self-Attention with Rotary Position Embeddings (RoPE).
 
@@ -131,11 +142,11 @@ class MultiHeadSelfAttentionWithRoPE(nn.Module):
         self.num_heads = num_heads
         self.d_k = d_model // num_heads  # Dimension per head
         self.d_v = self.d_k  # Following Vaswani et al., d_v = d_k
-        self.W_q = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device)
-        self.W_k = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device)
-        self.W_v = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device)
-        self.W_o = nn.Linear(self.num_heads * self.d_k, d_model, bias=False, device=device)
-        self.attention = ScaledDotProductAttention()
+        self.W_q = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device, dtype=dtype)
+        self.W_k = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device, dtype=dtype)
+        self.W_v = nn.Linear(d_model, self.num_heads * self.d_k, bias=False, device=device, dtype=dtype)
+        self.W_o = nn.Linear(self.num_heads * self.d_k, d_model, bias=False, device=device, dtype=dtype)
+        self.attention = ScaledDotProductAttention(dtype)
         self.theta = theta
         self.inv_freq = 1.0 / (theta ** (torch.arange(0, self.d_k, 2).float() / self.d_k))
 

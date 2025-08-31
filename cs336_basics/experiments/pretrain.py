@@ -12,6 +12,7 @@ from cs336_basics.experiments import *
 from tqdm import tqdm
 import numpy.typing as npt
 import numpy as np
+from torch.amp import autocast
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -74,9 +75,23 @@ def train_model(config: Dict,model_config: Dict):
     else:
         torch.set_float32_matmul_precision("medium")
 
+    if torch.cuda.is_available():
+        if model_config.dtype == "bfloat16":
+            max_flops = 989e12  # BF16 Tensor Core without sparsity.
+        else:
+            max_flops = 989e12 / 2  # TF32 Tensor Core without sparsity.
+    else:
+        max_flops = float("inf")
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    dtype = torch.bfloat16 if model_config.dtype == "bfloat16" else torch.float32
+
     # 加载数据
-    train_data = np.memmap(config.train_data_path, dtype=np.int32, mode="r")
-    valid_data = np.memmap(config.valid_data_path, dtype=np.int32, mode="r")
+    # train_data = np.memmap(config.train_data_path, dtype=np.int32, mode="r")
+    # valid_data = np.memmap(config.valid_data_path, dtype=np.int32, mode="r")
+    train_data = np.load(config.train_npy_path, mmap_mode="r")
+    valid_data = np.load(config.valid_npy_path, mmap_mode="r")
+    # train_data = np.memmap(config.train_npy_path, dtype=np.uint16, mode='r')
+    # valid_data = np.memmap(config.valid_npy_path, dtype=np.uint16, mode='r')
 
     model = TransformerLM(model_config.vocab_size,
                           model_config.context_length,
@@ -85,10 +100,11 @@ def train_model(config: Dict,model_config: Dict):
                           model_config.num_heads,
                           model_config.d_ff,
                           theta = model_config.rope_theta,
-                          device = model_config.device)
+                          device = device,
+                          dtype=dtype)
     if config.use_compile:
         print("Compiling model for training high performance...")
-        # model = torch.compile(model)
+        model = torch.compile(model)
 
     optimizer = AdamW(model.parameters(),
                       lr=config.lr,
@@ -107,6 +123,7 @@ def train_model(config: Dict,model_config: Dict):
     start_time = datetime.now()
     start_timestamp = time.time()
     for step in tqdm(range(1, config.train_steps+1)):
+        t0 = time.time()
         lr = lr_cosine_schedule(
             step,
             config.min_lr,
@@ -117,26 +134,40 @@ def train_model(config: Dict,model_config: Dict):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
-        loss = train(step, train_data, model, optimizer, config)
+        with autocast(device.type, dtype=dtype):
+            loss = train(step, train_data, model, optimizer, config)
 
         if step%config.log_interval==0:
             grad_norm = torch.sqrt(sum(x * x for x in (p.grad.data.norm() for p in model.parameters() if p.requires_grad)))
             wandb.log({
                 "train/loss": loss,
+                "train/perplexity": torch.exp(torch.tensor(loss)).item(),
                 "train/grad_norm": grad_norm,
                 "train/lr": lr,
                 "train/wallclock_time": (datetime.now() - start_time).total_seconds(),
                 "train/total_steps": step,
+                "train/gpu_memory": torch.cuda.memory_allocated() / 1024 ** 3 if torch.cuda.is_available() else 0,
             },step=step)
-            print(f"step= {step}, loss: {loss}, lr={lr}, grad_norm={grad_norm}")
-            logger.info(f"step= {step}, loss: {loss}, lr={lr}, grad_norm={grad_norm}")
+            # wait on the CPU for all device work to end so we get accurate per-iteration timings below
+            if device == torch.device("mps"):
+                torch.mps.synchronize()
+            elif device == torch.device("cuda"):
+                torch.cuda.synchronize()
+            # time and print
+            t1 = time.time()
+            # the 0th iteration is often an outlier (much slower) => skip logging it
+            token_per_second = step * config.batch_size * config.context_length / (t1-t0)
+            print(f"step= {step}|loss={loss:.3f}|lr={lr:.5f}|grad_norm={grad_norm:.5f}|time={t1-t0:.3f}ms|tok/s={token_per_second:.1f}")
+            logger.info(f"step= {step}|loss={loss:.3f}|lr={lr:.3f}|grad_norm={grad_norm:.3f}|time={t1-t0:.3f}")
         if step%config.eval_interval==0:
-            valid_loss = evaluate(valid_data, model, config)
+            with autocast(device.type, dtype=dtype):
+                valid_loss = evaluate(valid_data, model, config)
             wandb.log({
                 "valid/loss": valid_loss,
+                "valid/perplexity": torch.exp(torch.tensor(valid_loss)).item(),
                 "valid/wallclock_time": time.time() - start_timestamp,
             }, step=step)
-            print(f"step= {step}, valid_loss: {valid_loss}")
+            print(f"step= {step}, eval_loss: {valid_loss}")
 
         # save checkpoint
         if step % config.checkpoint_freq==0:
@@ -148,7 +179,8 @@ def train_model(config: Dict,model_config: Dict):
             print(f"checkpoint has been saved to {os.path.join(config.ckpt_path, f"checkpoint_{step}.pth")}")
 
     # final evaluate loss
-    eval_loss = evaluate(valid_data, model, config)
+    with autocast(device.type, dtype=dtype):
+        eval_loss = evaluate(valid_data, model, config)
     wandb.log({
         'val/loss': eval_loss,
         'val/wallclock_time': time.time() - start_timestamp
