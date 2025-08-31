@@ -624,7 +624,7 @@ def batch_tokenize(batch, tokenizer):
     return np.array(out, dtype=np.int32)
 
 
-def encode_txt_as_memarray(tokenizer, txt_path, memmap_path,batch_size=4096,n_workers=8):
+def encode_txt_as_memarray(tokenizer, txt_path, memmap_path,batch_size=4096,n_workers=1):
     before_batch_tokenize = time.time()
     print(f"Start tokenizing {txt_path}")
 

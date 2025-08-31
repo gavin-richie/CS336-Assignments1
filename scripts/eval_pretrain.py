@@ -44,7 +44,7 @@ def main(cfg: DictConfig):
 
         model = TransformerLM(**model_config)
 
-    with open(os.path.join(eval_config.save_path, f"checkpoint_{eval_config.iteration}.pt"), "rb") as f:
+    with open(os.path.join(eval_config.save_path, f"checkpoint_{eval_config.iteration}.pth"), "rb") as f:
         state_dict = torch.load(f,weights_only=True)
     model.load_state_dict(state_dict['model_state_dict'])
 
