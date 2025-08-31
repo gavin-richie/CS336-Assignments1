@@ -11,6 +11,7 @@ exp_name: cs336_lm_${dataset_name}
 
 dataset_split: train
 dat_dir: ${root_dir}/data/${dataset_name}/dat
+npy_dir: ${root_dir}/data/${dataset_name}/npy
 
 tokenizer_dir: ${root_dir}/tokenizers/${dataset_name}_${dataset_split}/ # save path for tokenizer
 vocab_path: ${tokenizer_dir}/vocab.pkl
@@ -28,11 +29,13 @@ vocab_size: ${vocab_size_map.${dataset_name}}
 train:
   project_name: ${exp_name}
 
-  train_data_path: ${dat_dir}/train.dat
-  valid_data_path: ${dat_dir}/valid.dat
+  train_dat_path: ${dat_dir}/train.dat
+  valid_dat_path: ${dat_dir}/valid.dat
+  train_npy_path: ${npy_dir}/train.npy
+  valid_npy_path: ${npy_dir}/valid.npy
 
   ckpt_path: "checkpoints/${exp_name}" # save path for both first train and resume train
-  lr: 0.0005
+  lr: 0.001
   min_lr: 0.0001
   beta1: 0.9
   beta2: 0.95
@@ -40,14 +43,14 @@ train:
   weight_decay: 0.01
   batch_size: 32
   context_length: 256
-  train_steps: 5000
   clip_grad_norm: 1.0
   warmup_iters: 500
-  cosine_iters: 5000
+  cosine_iters: 10000  # Increased to allow longer decay
+  train_steps: 5000 # 5000
   log_interval: 100
   eval_interval: 1000
-  val_batches: 20
-  checkpoint_freq: 15000
+  val_batches: 50  # increased from 20
+  checkpoint_freq: 20000
   resume_checkpoint: null   # load checkpoint from current hydra run dir
   use_compile: False
   device: "cuda"
@@ -57,10 +60,11 @@ model:
   vocab_size: ${vocab_size_map.${dataset_name}}
   batch_size: 32
   context_length: 256
-  d_model: 512
   num_layers: 4
   num_heads: 16
+  d_model: 512
   d_ff: 1344
   rope_theta: 10000.0
   device: "cuda"
+  dtype: "float32"
   checkpoint_dir: ${root_dir}/checkpoints/${exp_name}

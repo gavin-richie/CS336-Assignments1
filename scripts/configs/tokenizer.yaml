@@ -11,12 +11,17 @@ dataset_split: train          # `train` or `valid`, change as needed
 data_dir: ${root_dir}/data/${dataset_name}
 txt_dir: ${data_dir}/txt
 dat_dir: ${data_dir}/dat
+npy_dir: ${data_dir}/npy
+
 train_txt_path: ${txt_dir}/train.txt
 valid_txt_path: ${txt_dir}/valid.txt
 
 input_path: ${txt_dir}/${dataset_split}.txt   # txt data for training tokenizer
 train_dat_path: ${dat_dir}/train.dat
 valid_dat_path: ${dat_dir}/valid.dat
+
+train_npy_path: ${npy_dir}/train.npy
+valid_npy_path: ${npy_dir}/valid.npy
 
 tokenizer_dir: ${root_dir}/tokenizers/${dataset_name}_${dataset_split}/ # save path for tokenizer ex:tokenizer/owt_train
 vocab_path: ${tokenizer_dir}/vocab.pkl
@@ -32,9 +37,9 @@ vocab_size: ${vocab_size_map.${dataset_name}}
 special_tokens: ["<|endoftext|>"]
 
 # train tokenizer config
-num_chunks: 32
+num_chunks: 4 # 32
 num_processes: 8
-
+single_thread: 1
 
 # encode config
 batch_size: 10000 # 4096
