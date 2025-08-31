@@ -18,7 +18,7 @@ class TransformerBlock(nn.Module):
         self.num_heads = num_heads
         self.d_ff = d_ff
         self.ln1 = RMSNorm(d_model, device=device, dtype=dtype)
-        self.attn = MultiHeadSelfAttentionWithRoPE(d_model, num_heads, max_seq_len, theta,device)
+        self.attn = MultiHeadSelfAttentionWithRoPE(d_model, num_heads, max_seq_len, theta, device, dtype)
         self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
         self.ffn = FFN(d_model, d_ff, device, dtype)
 
@@ -56,13 +56,13 @@ class TransformerLM(nn.Module):
         self.d_model = d_model
         self.num_layers = num_layers
 
-        self.token_embedding = Embedding(vocab_size, d_model, device)
+        self.token_embedding = Embedding(vocab_size, d_model, device, dtype)
         self.layers = nn.ModuleList([
-            TransformerBlock(d_model, num_heads, d_ff, context_length, theta, device)
+            TransformerBlock(d_model, num_heads, d_ff, context_length, theta, device, dtype)
             for _ in range(num_layers)])
 
         self.ln_final = RMSNorm(d_model,device=device, dtype=dtype)
-        self.lm_head = nn.Linear(d_model, vocab_size,bias=False, device=device)
+        self.lm_head = nn.Linear(d_model, vocab_size,bias=False, device=device,dtype=dtype)
 
     def forward(self, in_indices:Tensor) -> Tensor:
         x = self.token_embedding(in_indices)
@@ -151,8 +151,8 @@ class TransformerLM(nn.Module):
             x = x[:, -self.context_length:] if x.size(1) > self.context_length else x
             # Get the logits from the model
             logits = self.forward(x)
-            # Take the logits for the next token
-            next_token_logits = logits[:, -1]
+            # Take the logits for the next token 表示所有样本中、最后一个 token 位置，模型对所有 32000 个可能 token 的 logit 分数
+            next_token_logits = logits[:, -1] #【batch_size,1,32000】
             # apply temperature scaling
             temperature_scaled_next_token_logits = next_token_logits / temperature
             # If top-k is provided, take the tokens with the highest score
@@ -166,6 +166,7 @@ class TransformerLM(nn.Module):
                 topk_mask = temperature_scaled_next_token_logits < threshold
                 temperature_scaled_next_token_logits.masked_fill(topk_mask, float("-inf"))
             next_token_probabilities = softmax(temperature_scaled_next_token_logits, dim=-1)
+            # get max probability token vocab-index from multinomial distribution
             next_token_id = torch.multinomial(next_token_probabilities, 1)
             # End generation if we see the EOS token ID
             if eos_token_id is not None and next_token_id.item() == eos_token_id:
